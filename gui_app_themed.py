@@ -11,6 +11,7 @@ import sys
 import winreg
 import requests
 import json
+import webbrowser
 from datetime import datetime
 from email.header import decode_header
 from dotenv import load_dotenv, set_key
@@ -38,11 +39,7 @@ THEME = {
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
 
-# ... imports ...
-
 # --- SAFER CONFIGURATION LOADING ---
-# Save the .env file in the User's Home folder (e.g., C:\Users\Name\.placement_watcher.env)
-# This prevents "Permission Denied" errors when the app runs on startup.
 USER_HOME = os.path.expanduser("~")
 ENV_FILE = os.path.join(USER_HOME, ".placement_watcher.env")
 
@@ -56,7 +53,7 @@ except PermissionError:
 except Exception as e:
     print(f"⚠️ Config Error: {e}")
 
-# ... Rest of the code ...# --- BACKEND LOGIC ---
+# --- BACKEND LOGIC ---
 class Database:
     def __init__(self, db_name="history.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
@@ -226,7 +223,13 @@ class App(ctk.CTk):
         self.geometry("900x600")
         self.configure(fg_color=THEME["bg_primary"])
         
-        # INTERCEPT CLOSE BUTTON
+        # 1. SET WINDOW ICON
+        try:
+            if os.path.exists("icon.ico"):
+                self.iconbitmap("icon.ico")
+        except:
+            pass 
+
         self.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
 
         self.grid_columnconfigure(1, weight=1)
@@ -236,7 +239,6 @@ class App(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color=THEME["bg_secondary"])
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         
-        # Logo Area
         ctk.CTkLabel(self.sidebar, text="ID WATCHER", font=THEME["font_header"], text_color=THEME["accent_blue"]).grid(row=0, column=0, pady=(40,20), padx=20)
         ctk.CTkLabel(self.sidebar, text="SYSTEM v2.0", font=("Consolas", 10), text_color="grey").grid(row=1, column=0, pady=(0,30))
         
@@ -256,31 +258,31 @@ class App(ctk.CTk):
         self.create_frames()
         self.show_dashboard()
 
-        # Startup
         self.after(100, self.check_auto_start)
-
-        # Setup System Tray
         threading.Thread(target=self.setup_tray, daemon=True).start()
 
-    # --- SYSTEM TRAY LOGIC ---
+    # --- SYSTEM TRAY ---
     def setup_tray(self):
-        image = Image.new('RGB', (64, 64), color=(0, 212, 255))
-        draw = ImageDraw.Draw(image)
-        draw.rectangle([16, 16, 48, 48], fill="black")
+        if os.path.exists("icon.ico"):
+            image = Image.open("icon.ico")
+        else:
+            image = Image.new('RGB', (64, 64), color=(0, 212, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle([16, 16, 48, 48], fill="black")
         
         menu = (pystray.MenuItem('Show', self.show_window_from_tray), 
                 pystray.MenuItem('Quit', self.quit_app))
-        self.tray_icon = pystray.Icon("name", image, "Placement Watcher", menu)
+        self.tray_icon = pystray.Icon("PlacementWatcher", image, "Placement Watcher", menu)
         self.tray_icon.run()
 
     def minimize_to_tray(self):
-        self.withdraw()  # Hide the window
-        # Notification to tell user it's still running
-        toast = Notification(app_id="Placement Watcher", title="Minimized to Tray", msg="I am still scanning in the background.", duration="short")
+        self.withdraw()
+        icon_path = os.path.abspath("icon.ico") if os.path.exists("icon.ico") else ""
+        toast = Notification(app_id="Placement Watcher", title="Minimized to Tray", msg="Scanning in background...", duration="short", icon=icon_path)
         toast.show()
 
     def show_window_from_tray(self, icon, item):
-        self.after(0, self.deiconify) # Show the window
+        self.after(0, self.deiconify)
 
     def quit_app(self, icon, item):
         self.worker_running = False
@@ -295,11 +297,19 @@ class App(ctk.CTk):
         else:
             self.log("Please configure Settings to start.")
 
+    def show_pass_help(self):
+        msg = ("1. Go to: https://myaccount.google.com/security\n"
+               "2. Enable '2-Step Verification'\n"
+               "3. Go to: https://myaccount.google.com/apppasswords\n"
+               "4. App: 'Mail', Device: 'Windows Computer'\n"
+               "5. Click 'Generate' and copy the 16-digit code.\n\n"
+               "Click OK to open these pages in your browser.")
+        if messagebox.askokcancel("How to get App Password", msg):
+            webbrowser.open("https://myaccount.google.com/apppasswords")
+
     def create_frames(self):
         # Dashboard
         self.dash_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        
-        # Status Bar
         status_bar = ctk.CTkFrame(self.dash_frame, fg_color=THEME["bg_card"], corner_radius=12, border_width=1, border_color=THEME["border_color"])
         status_bar.pack(fill="x", pady=(0, 20))
         
@@ -310,7 +320,6 @@ class App(ctk.CTk):
                                       text_color="black", height=32, font=("Arial", 12, "bold"), command=self.toggle_monitoring)
         self.status_btn.pack(side="right", padx=20, pady=15)
         
-        # Log Box
         ctk.CTkLabel(self.dash_frame, text="LIVE LOGS", font=("Consolas", 12, "bold"), text_color="grey").pack(anchor="w", pady=(0, 5))
         self.log_box = ctk.CTkTextbox(self.dash_frame, fg_color=THEME["bg_secondary"], 
                                     text_color=THEME["accent_green"], font=THEME["font_code"],
@@ -319,49 +328,50 @@ class App(ctk.CTk):
 
         # History Frame
         self.hist_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        
         header = ctk.CTkFrame(self.hist_frame, fg_color="transparent")
         header.pack(fill="x", pady=(0, 10))
         ctk.CTkLabel(header, text="MATCH HISTORY", font=THEME["font_header"], text_color="white").pack(side="left")
-        
-        ctk.CTkButton(header, text="CLEAR ALL", command=self.clear_history, 
-                    fg_color=THEME["bg_card"], hover_color=THEME["accent_red"], 
-                    text_color="white", width=100).pack(side="right")
+        ctk.CTkButton(header, text="CLEAR ALL", command=self.clear_history, fg_color=THEME["bg_card"], hover_color=THEME["accent_red"], text_color="white", width=100).pack(side="right")
 
         table_header = ctk.CTkFrame(self.hist_frame, fg_color=THEME["bg_card"], height=35, corner_radius=8)
         table_header.pack(fill="x", pady=(0,5))
-        
         table_header.grid_columnconfigure(0, weight=2)
         table_header.grid_columnconfigure(1, weight=3)
         table_header.grid_columnconfigure(2, weight=2)
-        
         ctk.CTkLabel(table_header, text="TIME", font=("Consolas", 11, "bold"), text_color="grey").grid(row=0, column=0, padx=10, pady=8, sticky="w")
         ctk.CTkLabel(table_header, text="COMPANY", font=("Consolas", 11, "bold"), text_color="grey").grid(row=0, column=1, padx=10, pady=8, sticky="w")
         ctk.CTkLabel(table_header, text="SOURCE", font=("Consolas", 11, "bold"), text_color="grey").grid(row=0, column=2, padx=10, pady=8, sticky="w")
-
         self.tree_scroll = ctk.CTkScrollableFrame(self.hist_frame, fg_color="transparent")
         self.tree_scroll.pack(fill="both", expand=True)
 
-        # Settings
-        self.set_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        # Settings - CHANGED TO SCROLLABLE FRAME
+        self.set_frame = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
         ctk.CTkLabel(self.set_frame, text="CONFIGURATION", font=THEME["font_header"], text_color="white").grid(row=0, column=0, sticky="w", pady=(0,30))
+        
         self.entries = {}
         fields = ["EMAIL_USER", "EMAIL_PASS", "TARGET_ID", "CHECK_INTERVAL", "AI_MODEL"]
+        
         for i, f in enumerate(fields):
             ctk.CTkLabel(self.set_frame, text=f.replace("_", " "), font=("Arial", 12, "bold"), text_color="grey").grid(row=i*2+1, column=0, sticky="w", pady=(10,5))
+            
             ent = ctk.CTkEntry(self.set_frame, width=400, height=40, fg_color=THEME["bg_card"], border_color=THEME["border_color"], text_color="white")
             if "PASS" in f: ent.configure(show="•")
             ent.insert(0, os.getenv(f, ""))
             ent.grid(row=i*2+2, column=0, sticky="w")
             self.entries[f] = ent
             
+            if f == "EMAIL_PASS":
+                help_btn = ctk.CTkButton(self.set_frame, text="How to find?", width=100, 
+                                       fg_color=THEME["bg_card"], hover_color=THEME["bg_secondary"],
+                                       command=self.show_pass_help)
+                help_btn.grid(row=i*2+2, column=1, sticky="w", padx=10)
+
         self.startup_var = ctk.BooleanVar(value=self.check_startup_registry())
         ctk.CTkCheckBox(self.set_frame, text="Run on Windows Startup", variable=self.startup_var, command=self.toggle_startup_registry, fg_color=THEME["accent_blue"], hover_color=THEME["accent_blue"]).grid(row=12, column=0, pady=20, sticky="w")
         ctk.CTkButton(self.set_frame, text="SAVE SETTINGS", command=self.save_settings, fg_color=THEME["accent_green"], text_color="black", font=("Arial", 13, "bold"), height=45, width=400).grid(row=13, column=0)
         
         note_text = "💡 TIP: If 'Ollama' is running in the background, the app will automatically\ndetect it and switch to AI Mode for smarter company detection."
         ctk.CTkLabel(self.set_frame, text=note_text, font=("Consolas", 11), text_color="grey", justify="left").grid(row=14, column=0, pady=(20,0), sticky="w")
-
         ctk.CTkLabel(self.set_frame, text="⚡ System built by Sudhakar", font=("Consolas", 12, "bold"), text_color=THEME["accent_blue"]).grid(row=15, column=0, pady=(30,0))
 
     # --- ACTIONS ---
@@ -396,7 +406,8 @@ class App(ctk.CTk):
 
     def bg_loop(self):
         def send_alert(company_name):
-            toast = Notification(app_id="Placement Watcher", title="MATCH FOUND!", msg=f"Company: {company_name}", duration="long")
+            icon_path = os.path.abspath("icon.ico") if os.path.exists("icon.ico") else ""
+            toast = Notification(app_id="Placement Watcher", title="MATCH FOUND!", msg=f"Company: {company_name}", duration="long", icon=icon_path)
             toast.show()
 
         worker = MailWorker(self.log, send_alert, self.update_ai_indicator)
@@ -409,18 +420,15 @@ class App(ctk.CTk):
     def load_history(self):
         for w in self.tree_scroll.winfo_children(): w.destroy()
         rows = Database().get_all()
-        
         if not rows:
             ctk.CTkLabel(self.tree_scroll, text="No history found.", text_color="grey").pack(pady=20)
             return
-
         for row in rows:
             row_frame = ctk.CTkFrame(self.tree_scroll, fg_color=THEME["bg_card"], corner_radius=6)
             row_frame.pack(fill="x", pady=2)
             row_frame.grid_columnconfigure(0, weight=2)
             row_frame.grid_columnconfigure(1, weight=3)
             row_frame.grid_columnconfigure(2, weight=2)
-
             ctk.CTkLabel(row_frame, text=row[0], font=("Consolas", 11), text_color="grey").grid(row=0, column=0, padx=10, pady=10, sticky="w")
             ctk.CTkLabel(row_frame, text=row[1], font=("Arial", 12, "bold"), text_color=THEME["accent_blue"]).grid(row=0, column=1, padx=10, pady=10, sticky="w")
             ctk.CTkLabel(row_frame, text=row[2], font=("Arial", 11), text_color="white").grid(row=0, column=2, padx=10, pady=10, sticky="w")

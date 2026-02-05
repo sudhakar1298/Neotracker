@@ -7,7 +7,7 @@
 # --- Build Artifacts (PyInstaller) ---
 # These are generated every time you build the exe
 build/
-dist/
+
 *.spec
 
 # --- Python ---
