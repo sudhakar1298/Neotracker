@@ -1,0 +1,33 @@
+
+# --- Security (Critical) ---
+.env
+.placement_watcher.env
+*.env
+
+# --- Build Artifacts (PyInstaller) ---
+# These are generated every time you build the exe
+build/
+dist/
+*.spec
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Runtime Data ---
+# Database files
+history
+*.db
+*.sqlite
+
+# Downloaded attachments folder
+attachments/
+
+# --- IDE Settings (Optional) ---
+.vscode/
+.idea/
+
+# --- OS Files ---
+Thumbs.db
+Desktop.ini
